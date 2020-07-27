@@ -57,6 +57,9 @@ public class CreateGanttChart {
                 check = scheduling(data);
                 geneLength++;
                 System.out.println("遺伝子数：" + geneLength);
+                // if (geneLength > 20) {
+                // check = true;
+                // }
             }
 
         }
@@ -69,42 +72,76 @@ public class CreateGanttChart {
     private static boolean scheduling(Data data) {
 
         Data cloneData = data;
+        int maxChildTaskEndDay = 0;
 
+        // 遺伝子数のサイズチェック
         if (!checkDuration(cloneData)) {
             return false;
         }
 
         for (JsonNode nTask : root.get("tasks")) {
-            if (nTask.get("duration") == null || !taskCheck(cloneData.tasks, nTask.get("id").asInt())) {
+
+            // 事前作業が終わっているかのチェック
+            if (nTask.get("predecessorIds") != null) {
+                Object[] array = prodecessorCheck(cloneData, nTask);
+                if (!(boolean) array[0]) {
+                    return false;
+                }
+                maxChildTaskEndDay = (int) array[1];
+            }
+
+            // すでに格納しているタスクかのチェック
+            if (!taskCheck(cloneData.tasks, nTask.get("id").asInt())) {
                 return false;
+            }
+
+            // 親タスクの時
+            if (nTask.get("duration") == null) {
+                Object[] array = addParentTask(cloneData, nTask);
+                cloneData = (Data) array[1];
+                if ((boolean) array[0]) {
+                    continue;
+                }
+                else {
+                    return false;
+                }
             }
 
             Task task = new Task();
             task.id = nTask.get("id").asInt();
-            task.duration = nTask.get("duration").asInt();
             for (JsonNode nMember : root.get("members")) {
                 if (!personCheck(nTask.get("skillIds"), nMember.get("skillIds"))) {
                     return false;
                 }
                 task.personId = nMember.get("id").asInt();
-                task.start = cloneData.people[nMember.get("id").asInt() - 1].gene.size();
-                for (int i = 0; i < task.duration; i++) {
+
+                if (cloneData.people[nMember.get("id").asInt() - 1].gene.size() < maxChildTaskEndDay) {
+                    for (int i = 0; i < maxChildTaskEndDay
+                        - cloneData.people[nMember.get("id").asInt() - 1].gene.size(); i++) {
+                        cloneData.people[nMember.get("id").asInt() - 1].gene.add(1);
+                    }
+                }
+
+                task.startDay = cloneData.people[nMember.get("id").asInt() - 1].gene.size();
+                task.endDay = task.startDay + nTask.get("duration").asInt() - 1;
+                for (int i = 0; i < task.endDay + 1; i++) {
                     cloneData.people[nMember.get("id").asInt() - 1].gene.add(1);
                 }
 
                 cloneData.tasks.add(task);
 
+                // 再帰
                 if (!scheduling(cloneData)) {
-                    return false;
+                    continue;
                 }
             }
-
         }
-        for (Task task2 : cloneData.tasks) {
-            System.out.println(task2.id);
-            System.out.println(task2.duration);
-            System.out.println(task2.start);
-            System.out.println(task2.personId);
+        System.out.println("--------------スケジュール-------------");
+        for (Task task : cloneData.tasks) {
+            System.out.println("--------タスクID[" + task.id + "]--------");
+            System.out.println("タスク開始日：" + task.startDay);
+            System.out.println("タスク終了日：" + task.endDay);
+            System.out.println("作業者：" + task.personId);
         }
         return true;
     }
@@ -134,16 +171,76 @@ public class CreateGanttChart {
 
     // タスクを実行するスキルを持ってるか
     private static boolean personCheck(JsonNode taskSkillIds, JsonNode memberSkillIds) {
-        for (JsonNode i : taskSkillIds) {
-            for (JsonNode j : memberSkillIds) {
-                if (i.asInt() == j.asInt()) {
-                    return true;
+        if (taskSkillIds == null) {
+            return true;
+        }
+
+        int count = 0;
+        int taskSkillIdNum = taskSkillIds.size();
+        for (JsonNode taskSkillId : taskSkillIds) {
+            for (JsonNode memberSkillId : memberSkillIds) {
+                if (taskSkillId.asInt() == memberSkillId.asInt()) {
+                    count++;
                 }
             }
+        }
+        if (count == taskSkillIdNum) {
+            return true;
         }
         return false;
     }
 
+    // 事前作業のあるタスクの関してのチェック
+    private static Object[] prodecessorCheck(Data data, JsonNode nTask) {
+        Object[] array = new Object[2];
+        int count = 0;
+        int taskProdecessorIdsNum = nTask.get("predecessorIds").size();
+        // 事前作業の最大終了日
+        int maxChildTaskEndDay = 0;
+        array[0] = false;
+        for (JsonNode predecessorId : nTask.get("predecessorIds")) {
+            for (Task task : data.tasks) {
+                if (predecessorId.asInt() == task.id) {
+                    count++;
+                    if (task.endDay > maxChildTaskEndDay) {
+                        maxChildTaskEndDay = task.endDay;
+                    }
+                }
+            }
+        }
+        if (count == taskProdecessorIdsNum) {
+            array[0] = true;
+        }
+        array[1] = maxChildTaskEndDay;
+        return array;
+    }
+
+    // 子タスクが終わっているとき、親タスクを完了させる
+    private static Object[] addParentTask(Data data, JsonNode nTask) {
+        Object[] array = new Object[2];
+        array[0] = false;
+        int count = 0;
+        int childIdsNum = nTask.get("childIds").size();
+        for (JsonNode childId : nTask.get("childIds")) {
+            for (Task task : data.tasks) {
+                if (task.id == childId.asInt()) {
+                    count++;
+                }
+            }
+        }
+        if (count == childIdsNum) {
+            Task task = new Task();
+            task.id = nTask.get("id").asInt();
+            task.startDay = 0;
+            task.endDay = 0;
+            task.personId = 0;
+            data.tasks.add(task);
+            array[0] = true;
+        }
+        array[1] = data;
+
+        return array;
+    }
 }
 
 class Data {
@@ -157,9 +254,9 @@ class Task {
 
     int id;
 
-    int duration;
+    int startDay;
 
-    int start;
+    int endDay;
 
     int personId;
 }
