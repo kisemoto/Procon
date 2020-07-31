@@ -18,16 +18,21 @@ public class CreateGanttChart {
 
     public static JsonNode root;
 
+    public static int taskSum;
+
     /**
      * @param args
      */
     public static void main(String[] args) {
         geneLength = 0;
-        Data data = new Data();
 
         try {
+            // 入力JSONデータの読み込み
             ObjectMapper mapper = new ObjectMapper();
             root = mapper.readTree(new File("./data/question-0.json"));
+
+            // タスク数
+            taskSum = root.get("tasks").size();
 
             // 初期ゲノムサイズ設定
             for (JsonNode nTask : root.get("tasks")) {
@@ -38,26 +43,29 @@ public class CreateGanttChart {
                 }
             }
 
-            // メンバー数の設定
-            data.people = new Person[root.get("members").size()];
-            for (int i = 0; i < root.get("members").size(); i++) {
-                data.people[i] = new Person();
-                data.people[i].gene = new ArrayList<Integer>();
-            }
-
-            // タスク数の設定
-            data.tasks = new ArrayList<Task>();
-
             System.out.println("初期遺伝子数：" + geneLength);
-            System.out.println("メンバー数：" + data.people.length);
 
             boolean check = false;
 
             while (!check) {
+
+                System.out.println("遺伝子数：" + geneLength);
+
+                // データの初期化
+                Data data = new Data();
+                // メンバーの初期化
+                data.people = new Person[root.get("members").size()];
+                for (int i = 0; i < root.get("members").size(); i++) {
+                    data.people[i] = new Person();
+                    data.people[i].gene = new ArrayList<Integer>();
+                }
+                // タスクの初期化
+                data.tasks = new ArrayList<Task>();
+
                 check = scheduling(data);
                 geneLength++;
-                System.out.println("遺伝子数：" + geneLength);
-                // if (geneLength > 20) {
+
+                // if (geneLength == 30) {
                 // check = true;
                 // }
             }
@@ -79,46 +87,65 @@ public class CreateGanttChart {
             return false;
         }
 
+        // 全タスク格納チェック
+        if (checkTaskComplete(cloneData)) {
+            System.out.println("--------------スケジュール-------------");
+            for (Task taskk : cloneData.tasks) {
+                System.out.println("--------タスクID[" + taskk.id + "]--------");
+                System.out.println("タスク開始日：" + taskk.startDay);
+                System.out.println("タスク終了日：" + taskk.endDay);
+                System.out.println("作業者：" + taskk.personId);
+            }
+            return true;
+        }
+
         for (JsonNode nTask : root.get("tasks")) {
+
+            System.out.println("選択タスク：" + nTask.get("id").asText());
+
+            // すでに格納しているタスクかのチェック
+            if (!taskCheck(cloneData.tasks, nTask.get("id").asInt())) {
+                continue;
+            }
 
             // 事前作業が終わっているかのチェック
             if (nTask.get("predecessorIds") != null) {
                 Object[] array = prodecessorCheck(cloneData, nTask);
                 if (!(boolean) array[0]) {
-                    return false;
+                    continue;
                 }
                 maxChildTaskEndDay = (int) array[1];
-            }
-
-            // すでに格納しているタスクかのチェック
-            if (!taskCheck(cloneData.tasks, nTask.get("id").asInt())) {
-                return false;
             }
 
             // 親タスクの時
             if (nTask.get("duration") == null) {
                 Object[] array = addParentTask(cloneData, nTask);
-                cloneData = (Data) array[1];
+                Task task = (Task) array[1];
                 if ((boolean) array[0]) {
-                    continue;
+                    cloneData.tasks.add(task);
+                    System.out.println("親タスク格納" + task.id);
+                    System.out.println("親タスク数" + cloneData.tasks.size());
+                    scheduling(cloneData);
                 }
                 else {
-                    return false;
+                    continue;
                 }
             }
 
             Task task = new Task();
             task.id = nTask.get("id").asInt();
             for (JsonNode nMember : root.get("members")) {
+
                 if (!personCheck(nTask.get("skillIds"), nMember.get("skillIds"))) {
-                    return false;
+                    continue;
                 }
                 task.personId = nMember.get("id").asInt();
-
-                if (cloneData.people[nMember.get("id").asInt() - 1].gene.size() < maxChildTaskEndDay) {
-                    for (int i = 0; i < maxChildTaskEndDay
-                        - cloneData.people[nMember.get("id").asInt() - 1].gene.size(); i++) {
-                        cloneData.people[nMember.get("id").asInt() - 1].gene.add(1);
+                int geneSize = cloneData.people[nMember.get("id").asInt() - 1].gene.size();
+                if (nTask.get("predecessorIds") != null) {
+                    if (geneSize < maxChildTaskEndDay + 1) {
+                        for (int i = 0; i < maxChildTaskEndDay + 1 - geneSize; i++) {
+                            cloneData.people[nMember.get("id").asInt() - 1].gene.add(1);
+                        }
                     }
                 }
 
@@ -128,22 +155,19 @@ public class CreateGanttChart {
                     cloneData.people[nMember.get("id").asInt() - 1].gene.add(1);
                 }
 
+                System.out.println("子タスク格納：" + task.id + "　担当：" + task.personId);
                 cloneData.tasks.add(task);
 
                 // 再帰
                 if (!scheduling(cloneData)) {
                     continue;
                 }
+                else {
+                    return true;
+                }
             }
         }
-        System.out.println("--------------スケジュール-------------");
-        for (Task task : cloneData.tasks) {
-            System.out.println("--------タスクID[" + task.id + "]--------");
-            System.out.println("タスク開始日：" + task.startDay);
-            System.out.println("タスク終了日：" + task.endDay);
-            System.out.println("作業者：" + task.personId);
-        }
-        return true;
+        return false;
     }
 
     // ゲノムのサイズオーバー判別
@@ -219,27 +243,44 @@ public class CreateGanttChart {
     private static Object[] addParentTask(Data data, JsonNode nTask) {
         Object[] array = new Object[2];
         array[0] = false;
+
         int count = 0;
         int childIdsNum = nTask.get("childIds").size();
+
+        Task task = new Task();
+        task.id = nTask.get("id").asInt();
+        task.startDay = 1000000;
+        task.endDay = 0;
+        task.personId = 0;
         for (JsonNode childId : nTask.get("childIds")) {
-            for (Task task : data.tasks) {
-                if (task.id == childId.asInt()) {
+            for (Task t : data.tasks) {
+                if (t.id == childId.asInt()) {
                     count++;
+                    if (t.startDay < task.startDay) {
+                        task.startDay = t.startDay;
+                    }
+                    if (t.endDay > task.endDay) {
+                        task.endDay = t.endDay;
+                    }
                 }
             }
         }
         if (count == childIdsNum) {
-            Task task = new Task();
-            task.id = nTask.get("id").asInt();
-            task.startDay = 0;
-            task.endDay = 0;
-            task.personId = 0;
-            data.tasks.add(task);
             array[0] = true;
         }
-        array[1] = data;
+        array[1] = task;
 
         return array;
+    }
+
+    // 全タスクを格納したかのチェック
+    private static boolean checkTaskComplete(Data data) {
+        System.out.println("現在のタスク数" + data.tasks.size() + "-----------");
+        if (data.tasks.size() == taskSum) {
+            System.out.println("タスク数到達");
+            return true;
+        }
+        return false;
     }
 }
 

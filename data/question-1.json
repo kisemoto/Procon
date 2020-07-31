@@ -1,0 +1,54 @@
+{
+    "skills": [
+        {
+            "id": 1,
+            "name": "プログラミング"
+        },
+        {
+            "id": 2,
+            "name": "テスト"
+        },
+        {
+            "id": 3,
+            "name": "UI設計"
+        }
+    ],
+    "tasks": [
+        {
+            "id": 1,
+            "name": "開発",
+            "childIds": [2, 3]
+        },
+        {
+            "id": 2,
+            "name": "モジュールA",
+            "duration": 3,
+            "skillIds": [2]
+        },
+        {
+            "id": 3,
+            "name": "モジュールB",
+            "duration": 4,
+            "skillIds": [1]
+        },
+        {
+            "id": 4,
+            "name": "モジュールA",
+            "duration": 2,
+            "skillIds": [2],
+            "predecessorIds": [1]
+        }
+    ],
+    "members": [
+        {
+            "id": 1,
+            "name": "アリス",
+            "skillIds": [1]
+        },
+        {
+            "id": 2,
+            "name": "ボブ",
+            "skillIds": [2]
+        }
+    ]
+}
