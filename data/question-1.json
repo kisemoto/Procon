@@ -23,13 +23,13 @@
             "id": 2,
             "name": "モジュールA",
             "duration": 3,
-            "skillIds": [2]
+            "skillIds": [1]
         },
         {
             "id": 3,
             "name": "モジュールB",
             "duration": 4,
-            "skillIds": [1]
+            "skillIds": [2]
         },
         {
             "id": 4,
@@ -43,12 +43,12 @@
         {
             "id": 1,
             "name": "アリス",
-            "skillIds": [1]
+            "skillIds": [1,2]
         },
         {
             "id": 2,
             "name": "ボブ",
-            "skillIds": [2]
+            "skillIds": [1]
         }
     ]
 }
